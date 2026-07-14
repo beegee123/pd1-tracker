@@ -1,6 +1,14 @@
+import { createClient } from '@supabase/supabase-js';
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY
+);
+
+
 
 const PLAN = [
   { week: 1, title: "Fundamentals & Data Modeling", topics: [
@@ -236,10 +244,14 @@ export default function Tracker() {
   useEffect(() => {
     async function load() {
       try {
-        const saved = localStorage.getItem('pd1-progress');
-        if (saved) { const data = JSON.parse(saved);
+        const { data } = await supabase
+          .from('progress')
+          .select('*')
+          .single();
+        if (data) {
           setStatuses(data.statuses || {});
           setScores(data.scores || { exam1: "", exam2: "" });
+          setDarkMode(data.dark_mode ?? true);
         }
       } catch (e) {
         // no data yet
@@ -249,17 +261,13 @@ export default function Tracker() {
     load();
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem('pd1-darkmode', JSON.stringify(darkMode));
-  }, [darkMode]);
-
   async function persist(nextStatuses, nextScores) {
     try {
-      localStorage.setItem('pd1-progress', JSON.stringify({
-        statuses: nextStatuses,
-        scores: nextScores,
-      }));
-    } catch (e) {
+      const result = await supabase
+        .from('progress')
+        .upsert({ id: 1, statuses: nextStatuses, scores: nextScores, dark_mode: darkMode });
+        console.log('saved:', result.data, 'error:', result.error);
+      } catch (e) {
       console.error('save failed', e);
     }
   }
