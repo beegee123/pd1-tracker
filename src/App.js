@@ -1,12 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL,
-  process.env.REACT_APP_SUPABASE_ANON_KEY
-);
+import { supabase, useSession, authHeaders } from './pd1hub';
 
 
 
@@ -99,7 +94,7 @@ function StudyBuddy({ week, theme }) {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 800,
@@ -211,6 +206,7 @@ Be concise and exam-focused. Use examples when helpful. Keep responses short.`,
 }
 
 export default function Tracker() {
+  const userId = useSession().user.id;
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('pd1-darkmode');
       return saved !== null ? JSON.parse(saved) : true;
@@ -247,7 +243,8 @@ export default function Tracker() {
         const { data } = await supabase
           .from('progress')
           .select('*')
-          .single();
+          .eq('user_id', userId)
+          .maybeSingle();
         if (data) {
           setStatuses(data.statuses || {});
           setScores(data.scores || { exam1: "", exam2: "" });
@@ -259,13 +256,16 @@ export default function Tracker() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [userId]);
 
   async function persist(nextStatuses, nextScores) {
     try {
       const result = await supabase
         .from('progress')
-        .upsert({ id: 1, statuses: nextStatuses, scores: nextScores, dark_mode: darkMode });
+        .upsert(
+          { user_id: userId, statuses: nextStatuses, scores: nextScores, dark_mode: darkMode },
+          { onConflict: 'user_id' }
+        );
         console.log('saved:', result.data, 'error:', result.error);
       } catch (e) {
       console.error('save failed', e);
